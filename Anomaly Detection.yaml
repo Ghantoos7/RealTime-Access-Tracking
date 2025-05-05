@@ -1,0 +1,223 @@
+apiVersion: 1
+groups:
+    - orgId: 1
+      name: Anomaly Detection
+      folder: Anomaly Detection
+      interval: 10s
+      rules:
+        - uid: cekzj0lng1v5sc
+          title: Never Exited
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: aekzi5ehg64g0e
+              model:
+                intervalMs: 1000
+                maxDataPoints: 43200
+                query: "import \"experimental\"\r\n\r\nentries =\r\n  from(bucket: \"rfid_events\")\r\n    |> range(start: -24h)\r\n    |> filter(fn: (r) => r._measurement == \"rfid_event\")\r\n    |> filter(fn: (r) => r._field == \"rssi\" and r.event == \"entry\")\r\n    |> filter(fn: (r) => r._time < experimental.subDuration(d: 8h, from: now()))\r\n    |> group(columns: [\"epc\"])\r\n    |> count()\r\n    |> rename(columns: {_value: \"entries\"})\r\n\r\nexits =\r\n  from(bucket: \"rfid_events\")\r\n    |> range(start: -24h)\r\n    |> filter(fn: (r) => r._measurement == \"rfid_event\")\r\n    |> filter(fn: (r) => r._field == \"rssi\" and r.event == \"exit\")\r\n    |> group(columns: [\"epc\"])\r\n    |> count()\r\n    |> rename(columns: {_value: \"exits\"})\r\n\r\njoin(tables: {entry: entries, exit: exits}, on: [\"epc\"])\r\n  |> map(fn: (r) => ({\r\n      epc: r.epc,\r\n      unmatched: r.entries - r.exits\r\n  }))\r\n  |> filter(fn: (r) => r.unmatched > 0)\r\n"
+                refId: A
+            - refId: B
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                type: reduce
+            - refId: C
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: B
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          annotations:
+            description: Flags people that have an entry event without a corresponding exit after a defined period (8 hours atm). Useful for tracking unaccounted presence in the building.
+            summary: Identifies tags that have entered but not exited within a time window.
+          isPaused: false
+          notification_settings:
+            receiver: Georgio Ghnatos
+        - uid: bekzj6djwt98gf
+          title: Rapid Scan
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: aekzi5ehg64g0e
+              model:
+                intervalMs: 1000
+                maxDataPoints: 43200
+                query: "from(bucket: \"rfid_events\")\r\n  |> range(start: -2m)\r\n  |> filter(fn: (r) => r._measurement == \"rfid_event\")\r\n  |> filter(fn: (r) => r._field == \"rssi\")\r\n  |> group(columns: [\"epc\"])\r\n  |> count()\r\n  |> filter(fn: (r) => r._value > 10)\r\n  |> keep(columns: [\"epc\", \"_value\"])\r\n"
+                refId: A
+            - refId: B
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                type: reduce
+            - refId: C
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: B
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          annotations:
+            description: Alerts when the number of events from a single person exceeds a defined threshold within a short timeframe. Helps identify potential misuse or faulty tag behavior.
+            summary: Monitors excessive scan frequency by the same person.
+          isPaused: false
+          notification_settings:
+            receiver: Georgio Ghnatos
+        - uid: fekzj9kdasjk0e
+          title: Nighttime Entry Alert
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: aekzi5ehg64g0e
+              model:
+                intervalMs: 1000
+                maxDataPoints: 43200
+                query: "import \"date\"\r\n\r\nfrom(bucket: \"rfid_events\")\r\n  |> range(start: -1d)\r\n  |> filter(fn: (r) => r._measurement == \"rfid_event\")\r\n  |> filter(fn: (r) => r._field == \"rssi\")\r\n  |> filter(fn: (r) => r.event == \"entry\")\r\n  |> filter(fn: (r) => date.hour(t: r._time) < 6)\r\n"
+                refId: A
+            - refId: B
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                type: reduce
+            - refId: C
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: B
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          annotations:
+            description: Triggers an alert when a person accesses the building before 6 AM. Used to flag unexpected or off-hour entries that may require manual review.
+            summary: Detects entrance events occurring before 6:00 AM.
+          isPaused: false
+          notification_settings:
+            receiver: Georgio Ghnatos
