@@ -17,7 +17,7 @@ def rssi_single_score(rssi):
     if rssi <= -80:
         return 0
     elif rssi < -55:
-        return (rssi + 80) / 25 * 5
+        return ((rssi + 80) / 25) * 5
     else:
         delta = rssi + 55
         return min(5 + 10 * (1 - math.exp(-0.15 * delta)), 15)
